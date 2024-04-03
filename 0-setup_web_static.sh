@@ -1,43 +1,82 @@
 #!/usr/bin/env bash
-# script that sets up your web servers for the deployment of web_static
+# setup webserver for deployment of webstatic
+DIR_DATA="/data"
+DIR_TEST="$DIR_DATA/web_static/releases/test"
+DIR_SHARED="$DIR_DATA/web_static/shared"
+DIR_CUR="$DIR_DATA/web_static/current"
+USER_CONF="ubuntu"
+NGINX_CONF="/etc/nginx/sites-available"
+NGINX_ENABLED="/etc/nginx/sites-enabled"
 
-# Updating all packages
-sudo apt-get -y update
-sudo apt-get -y install nginx
+# upgrase the system
+apt-get update
 
-# Create directories and symbolic link
-sudo mkdir -p /data/web_static/releases/test /data/web_static/shared
-echo "Holberton School" > /data/web_static/releases/test/index.html
-sudo ln -sf /data/web_static/releases/test/ /data/web_static/current
+# install nginx 
+apt-get -y install nginx
 
-# Change permissions
-sudo chown -hR ubuntu:ubuntu /data
+# mkdir for test
+mkdir -p $DIR_TEST
 
-# Writing Nginx configuration
-cat <<EOF > /etc/nginx/sites-available/default
+# mkdir for shared 
+mkdir -p $DIR_SHARED
+
+# create fake html file
+if ! [[ -s "$DIR_TEST/index.html" ]]; then
+cat << EOT > "$DIR_TEST/index.html"
+<html>
+  <head>
+  </head>
+  <body>
+    Holberton School
+  </body>
+</html>
+EOT
+fi
+
+# symbolic link  
+ln -s -f $DIR_TEST $DIR_CUR
+
+# chown 
+chown -R $USER_CONF:$USER_CONF $DIR_DATA
+
+# update nginx 
+cat << EOT > "$NGINX_CONF/default"
 server {
+    
     listen 80 default_server;
     listen [::]:80 default_server;
-    add_header X-Served-By $HOSTNAME;
-    root   /var/www/html;
-    index  index.html index.htm;
 
-    location /hbnb_static {
-        alias /data/web_static/current;
-        index index.html index.htm;
+    location /hbnb_static/ {
+        alias "$DIR_CUR/";
+        autoindex off;
+    }
+
+    location / {
+        root /var/www/html;
+        index index.html;
     }
 
     location /redirect_me {
-        return 301 http://cuberule.com/;
+        return 301 https://www.youtube.com/watch?v=QH2-TGUlwu4;
     }
 
     error_page 404 /404.html;
-    location /404 {
-        root /var/www/html;
+
+    location = /404.html{
         internal;
     }
-}
-EOF
 
-# Reload Nginx configuration
-sudo service nginx reload
+   
+    add_header X-Served-By $(hostname);
+}
+EOT
+
+if ! [[ -h "$NGINX_ENABLED/default" ]]; then
+    ln -s "$NGINX_CONF/default" "$NGINX_ENABLED"
+fi
+
+if  nginx -t; then
+    service nginx restart 
+    exit 0
+fi 
+exit 1

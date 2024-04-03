@@ -1,28 +1,29 @@
 #!/usr/bin/env bash
 # setup webserver for deployment of webstatic
+
+# Define directories and configurations
 DIR_DATA="/data"
 DIR_TEST="$DIR_DATA/web_static/releases/test"
 DIR_SHARED="$DIR_DATA/web_static/shared"
-DIR_CUR="$DIR_DATA/web_static/current"
+DIR_CURRENT="$DIR_DATA/web_static/current"
 USER_CONF="ubuntu"
 NGINX_CONF="/etc/nginx/sites-available"
 NGINX_ENABLED="/etc/nginx/sites-enabled"
+NGINX_DEFAULT="$NGINX_CONF/default"
+NGINX_DEFAULT_ENABLED="$NGINX_ENABLED/default"
 
-# upgrase the system
+# Upgrade the system
 apt-get update
 
-# install nginx 
+# Install nginx 
 apt-get -y install nginx
 
-# mkdir for test
-mkdir -p $DIR_TEST
+# Create directories
+mkdir -p "$DIR_TEST" "$DIR_SHARED"
 
-# mkdir for shared 
-mkdir -p $DIR_SHARED
-
-# create fake html file
-if ! [[ -s "$DIR_TEST/index.html" ]]; then
-cat << EOT > "$DIR_TEST/index.html"
+# Create fake html file if it doesn't exist
+if ! [[ -e "$DIR_TEST/index.html" ]]; then
+    cat << EOT > "$DIR_TEST/index.html"
 <html>
   <head>
   </head>
@@ -33,21 +34,20 @@ cat << EOT > "$DIR_TEST/index.html"
 EOT
 fi
 
-# symbolic link  
-ln -s -f $DIR_TEST $DIR_CUR
+# Create symbolic link
+ln -sf "$DIR_TEST" "$DIR_CURRENT"
 
-# chown 
-chown -R $USER_CONF:$USER_CONF $DIR_DATA
+# Change ownership
+chown -R "$USER_CONF:$USER_CONF" "$DIR_DATA"
 
-# update nginx 
-cat << EOT > "$NGINX_CONF/default"
+# Update nginx configuration
+cat << EOT > "$NGINX_DEFAULT"
 server {
-    
     listen 80 default_server;
     listen [::]:80 default_server;
 
     location /hbnb_static/ {
-        alias "$DIR_CUR/";
+        alias "$DIR_CURRENT/";
         autoindex off;
     }
 
@@ -66,16 +66,17 @@ server {
         internal;
     }
 
-   
     add_header X-Served-By $(hostname);
 }
 EOT
 
-if ! [[ -h "$NGINX_ENABLED/default" ]]; then
-    ln -s "$NGINX_CONF/default" "$NGINX_ENABLED"
+# Enable default site if not already enabled
+if ! [[ -h "$NGINX_DEFAULT_ENABLED" ]]; then
+    ln -s "$NGINX_DEFAULT" "$NGINX_ENABLED"
 fi
 
-if  nginx -t; then
+# Check nginx configuration and restart nginx
+if nginx -t; then
     service nginx restart 
     exit 0
 fi 

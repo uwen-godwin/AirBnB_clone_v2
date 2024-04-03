@@ -1,51 +1,82 @@
 #!/usr/bin/env bash
-
-# Install Nginx if not already installed
-if ! command -v nginx &> /dev/null; then
-    apt-get update
-    apt-get -y install nginx
-fi
-
-# Create directories if they don't exist
+# setup webserver for deployment of webstatic
 DIR_DATA="/data"
-DIR_STATIC="$DIR_DATA/web_static"
-DIR_RELEASES="$DIR_STATIC/releases"
-DIR_SHARED="$DIR_STATIC/shared"
-DIR_TEST="$DIR_RELEASES/test"
-DIR_CURRENT="$DIR_STATIC/current"
+DIR_TEST="$DIR_DATA/web_static/releases/test"
+DIR_SHARED="$DIR_DATA/web_static/shared"
+DIR_CUR="$DIR_DATA/web_static/current"
+USER_CONF="ubuntu"
+NGINX_CONF="/etc/nginx/sites-available"
+NGINX_ENABLED="/etc/nginx/sites-enabled"
 
-mkdir -p "$DIR_DATA" "$DIR_STATIC" "$DIR_RELEASES" "$DIR_SHARED" "$DIR_TEST"
+# upgrase the system
+apt-get update
 
-# Create fake HTML file if it doesn't exist
-if [ ! -f "$DIR_TEST/index.html" ]; then
-    echo "<html>
+# install nginx 
+apt-get -y install nginx
+
+# mkdir for test
+mkdir -p $DIR_TEST
+
+# mkdir for shared 
+mkdir -p $DIR_SHARED
+
+# create fake html file
+if ! [[ -s "$DIR_TEST/index.html" ]]; then
+cat << EOT > "$DIR_TEST/index.html"
+<html>
   <head>
   </head>
   <body>
     Holberton School
   </body>
-</html>" | sudo tee "$DIR_TEST/index.html" >/dev/null
+</html>
+EOT
 fi
 
-# Create symbolic link (remove it if it already exists)
-[ -L "$DIR_CURRENT" ] && rm "$DIR_CURRENT"
-ln -s "$DIR_TEST" "$DIR_CURRENT"
+# symbolic link  
+ln -s -f $DIR_TEST $DIR_CUR
 
-# Give ownership to the ubuntu user and group recursively
-chown -R ubuntu:ubuntu "$DIR_DATA"
+# chown 
+chown -R $USER_CONF:$USER_CONF $DIR_DATA
 
-# Update Nginx configuration
-CONFIG_FILE="/etc/nginx/sites-available/default"
-CONFIG_LINE="location /hbnb_static/ { alias $DIR_CURRENT/; }"
+# update nginx 
+cat << EOT > "$NGINX_CONF/default"
+server {
+    
+    listen 80 default_server;
+    listen [::]:80 default_server;
 
-# Add or replace the configuration line
-if grep -q "$CONFIG_LINE" "$CONFIG_FILE"; then
-    sed -i "s|.*location /hbnb_static/.*|$CONFIG_LINE|" "$CONFIG_FILE"
-else
-    sed -i "/server {/ a $CONFIG_LINE" "$CONFIG_FILE"
+    location /hbnb_static/ {
+        alias "$DIR_CUR/";
+        autoindex off;
+    }
+
+    location / {
+        root /var/www/html;
+        index index.html;
+    }
+
+    location /redirect_me {
+        return 301 https://www.youtube.com/watch?v=QH2-TGUlwu4;
+    }
+
+    error_page 404 /404.html;
+
+    location = /404.html{
+        internal;
+    }
+
+   
+    add_header X-Served-By $(hostname);
+}
+EOT
+
+if ! [[ -h "$NGINX_ENABLED/default" ]]; then
+    ln -s "$NGINX_CONF/default" "$NGINX_ENABLED"
 fi
 
-# Restart Nginx
-service nginx restart
-
-exit 0
+if  nginx -t; then
+    service nginx restart 
+    exit 0
+fi 
+exit 1
